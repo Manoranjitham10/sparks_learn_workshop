@@ -1,26 +1,55 @@
-import React, { useState } from 'react';
-import { Check, X, ExternalLink, Download, MessageSquare } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { Check, X, MessageSquare, Loader2, User, FileText, AlertCircle } from 'lucide-react';
 import { mockService } from '../services/mockService';
-import { Submission, Task } from '../types';
+import { Submission, Task, Student } from '../types';
 
 const SubmissionGrader: React.FC = () => {
-  const [submissions, setSubmissions] = useState<Submission[]>(mockService.getSubmissions());
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(true);
+
   // Grading State
   const [scores, setScores] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState('');
 
+  useEffect(() => {
+    loadSubmissions();
+  }, []);
+
+  const loadSubmissions = async () => {
+    setIsLoading(true);
+    const data = await mockService.getSubmissions();
+    setSubmissions(data);
+    setIsLoading(false);
+  };
+
   const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
-  const relatedTask = selectedSubmission ? mockService.getTasks().find(t => t.id === selectedSubmission.taskId) : null;
-  const student = selectedSubmission ? mockService.getStudents().find(s => s.id === selectedSubmission.studentId) : null;
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+
+  useEffect(() => {
+    if (selectedSubmission) {
+      mockService.getTasks().then(tasks => {
+        const t = tasks.find(x => x.id === selectedSubmission.taskId);
+        if (t) setActiveTask(t);
+      });
+      mockService.getStudents().then(students => {
+        const s = students.find(x => x.id === selectedSubmission.studentId);
+        if (s) setActiveStudent(s);
+      });
+      
+      setScores(selectedSubmission.breakdown || {});
+      setFeedback(selectedSubmission.feedback || '');
+    }
+  }, [selectedSubmission]);
 
   const handleScoreChange = (rubricId: string, value: number, max: number) => {
     const val = Math.min(Math.max(0, value), max);
     setScores(prev => ({ ...prev, [rubricId]: val }));
   };
 
-  const submitGrade = (status: 'Approved' | 'Rejected') => {
+  const submitGrade = async (status: 'Approved' | 'Rejected') => {
     if (!selectedSubmission) return;
 
     const totalScore = Object.values(scores).reduce((a: number, b: number) => a + b, 0);
@@ -33,67 +62,61 @@ const SubmissionGrader: React.FC = () => {
       breakdown: scores
     };
 
-    mockService.updateSubmission(updated);
-    setSubmissions(mockService.getSubmissions());
+    await mockService.updateSubmission(updated);
+    loadSubmissions();
     setSelectedSubmissionId(null);
-    setScores({});
-    setFeedback('');
   };
 
-  if (selectedSubmission && relatedTask && student) {
-    const totalPossible = relatedTask.totalPoints;
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <Loader2 className="animate-spin text-indigo-600 mb-4" size={48} />
+        <p className="text-slate-500 font-medium">Loading submissions...</p>
+      </div>
+    );
+  }
+
+  if (selectedSubmission && activeTask && activeStudent) {
+    const totalPossible = activeTask.totalPoints;
     const currentTotal = Object.values(scores).reduce((a: number, b: number) => a + b, 0);
 
     return (
-      <div className="h-full flex flex-col">
-         <button onClick={() => setSelectedSubmissionId(null)} className="mb-4 text-indigo-600 text-sm hover:underline self-start">
-            &larr; Back to Submissions
+      <div className="h-full flex flex-col animate-in fade-in duration-300">
+         <button onClick={() => setSelectedSubmissionId(null)} className="mb-6 text-indigo-600 font-semibold flex items-center gap-2 hover:underline self-start">
+            &larr; Back to Registry
          </button>
          
          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
-            {/* Left: Content Viewer */}
-            <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+                <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <div>
-                        <h3 className="font-bold text-slate-800">{relatedTask.title}</h3>
-                        <p className="text-xs text-slate-500">Submitted by <span className="font-semibold text-slate-700">{student.name}</span></p>
+                        <h3 className="font-bold text-slate-800 text-lg">{activeTask.title}</h3>
+                        <p className="text-sm text-slate-500">Student: {activeStudent.name} ({activeStudent.roll_no})</p>
                     </div>
-                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-medium">{relatedTask.type}</span>
                 </div>
-                <div className="flex-1 bg-slate-100 p-8 flex items-center justify-center overflow-auto">
-                    {relatedTask.type === 'PROJECT_URL' ? (
-                        <div className="text-center">
-                            <ExternalLink size={48} className="mx-auto text-slate-400 mb-4" />
-                            <h4 className="text-lg font-medium text-slate-700 mb-2">External Link Submission</h4>
-                            <a href="#" className="text-indigo-600 hover:underline break-all">{selectedSubmission.content}</a>
-                            <p className="text-sm text-slate-500 mt-2">Open link in new tab to review.</p>
+                <div className="flex-1 bg-slate-100 p-8 overflow-auto">
+                    <div className="w-full bg-white p-8 rounded-xl border border-slate-200 shadow-sm min-h-full">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Submission Content</h4>
+                        <div className="p-6 bg-slate-50 rounded-lg text-slate-800 font-mono text-sm leading-relaxed whitespace-pre-wrap border border-slate-200">
+                            {selectedSubmission.content}
                         </div>
-                    ) : (
-                         <div className="text-center">
-                            <Download size={48} className="mx-auto text-slate-400 mb-4" />
-                            <h4 className="text-lg font-medium text-slate-700 mb-2">File Submission</h4>
-                            <p className="font-mono bg-white px-3 py-1 rounded border text-sm">{selectedSubmission.content}</p>
-                            <button className="mt-4 text-sm bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700">Download File</button>
-                        </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
-            {/* Right: Grading Panel */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-                <div className="p-4 border-b border-slate-200 bg-indigo-50">
-                    <h3 className="font-bold text-indigo-900">Evaluation</h3>
-                    <p className="text-xs text-indigo-700">Evaluate against defined criteria.</p>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+                <div className="p-6 border-b border-slate-200 bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Grading & Feedback</h3>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {relatedTask.rubric ? (
-                        <div className="space-y-4">
-                            {relatedTask.rubric.map((item) => (
-                                <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                    <div className="flex justify-between text-sm mb-2">
+                    {activeTask.rubric ? (
+                        <div className="space-y-6">
+                            {activeTask.rubric.map((item) => (
+                                <div key={item.id} className="space-y-2">
+                                    <div className="flex justify-between text-sm">
                                         <span className="font-medium text-slate-700">{item.description}</span>
-                                        <span className="text-slate-500 text-xs">Max: {item.maxPoints}</span>
+                                        <span className="font-bold text-indigo-600">{scores[item.id] || 0} / {item.maxPoints}</span>
                                     </div>
                                     <input 
                                         type="range" 
@@ -101,60 +124,57 @@ const SubmissionGrader: React.FC = () => {
                                         max={item.maxPoints} 
                                         value={scores[item.id] || 0}
                                         onChange={(e) => handleScoreChange(item.id, parseInt(e.target.value), item.maxPoints)}
-                                        className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                        className="w-full accent-indigo-600 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer"
                                     />
-                                    <div className="text-right text-xs font-bold text-indigo-600 mt-1">
-                                        {scores[item.id] || 0} / {item.maxPoints} Pts
-                                    </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center text-slate-500 text-sm py-4">
-                            No specific rubric. Assign global score.
-                            <div className="mt-4">
-                                 <label className="block text-left text-xs font-semibold mb-1">Total Score</label>
-                                 <input 
-                                    type="number" 
-                                    max={totalPossible}
-                                    className="w-full border rounded px-3 py-2"
-                                    value={scores['global'] || 0}
-                                    onChange={(e) => handleScoreChange('global', parseInt(e.target.value), totalPossible)}
-                                 />
-                            </div>
+                        <div className="space-y-2">
+                           <label className="block text-sm font-semibold text-slate-700">Total Score (Max {totalPossible})</label>
+                           <input 
+                              type="number" 
+                              max={totalPossible}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-xl text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              value={scores['global'] || 0}
+                              onChange={(e) => handleScoreChange('global', parseInt(e.target.value), totalPossible)}
+                           />
                         </div>
                     )}
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 pt-4">
                         <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                            <MessageSquare size={16} /> Feedback
+                            <MessageSquare size={16} /> Comments
                         </label>
                         <textarea 
-                            className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none"
-                            placeholder="Constructive feedback for the student..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-40 resize-none"
+                            placeholder="Add evaluation comments..."
                             value={feedback}
                             onChange={(e) => setFeedback(e.target.value)}
                         />
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-slate-200 bg-slate-50">
-                    <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm font-medium text-slate-600">Total Score</span>
-                        <span className="text-xl font-bold text-indigo-700">{currentTotal} <span className="text-sm text-slate-400 font-normal">/ {totalPossible}</span></span>
+                <div className="p-6 border-t border-slate-200 bg-slate-50">
+                    <div className="flex justify-between items-center mb-6">
+                        <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Total Points</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-bold text-indigo-600">{currentTotal}</span>
+                          <span className="text-sm font-semibold text-slate-400">/ {totalPossible}</span>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                         <button 
                             onClick={() => submitGrade('Rejected')}
-                            className="flex items-center justify-center gap-2 px-4 py-2 border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium text-sm"
+                            className="flex items-center justify-center gap-2 py-3 border border-slate-200 text-slate-600 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 rounded-xl transition-all font-bold text-sm"
                         >
-                            <X size={16} /> Reject
+                            <X size={18} /> Reject
                         </button>
                         <button 
                             onClick={() => submitGrade('Approved')}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors font-medium text-sm shadow-md"
+                            className="flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-all font-bold text-sm shadow-md"
                         >
-                            <Check size={16} /> Approve
+                            <Check size={18} /> Approve
                         </button>
                     </div>
                 </div>
@@ -165,59 +185,61 @@ const SubmissionGrader: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-       <div>
-           <h2 className="text-2xl font-bold text-slate-800">Submission Grading</h2>
-           <p className="text-slate-500 text-sm mt-1">Review and grade pending student work.</p>
+    <div className="space-y-6 animate-in fade-in duration-500">
+       <div className="flex justify-between items-center">
+           <div>
+               <h2 className="text-3xl font-bold text-slate-800">Submissions Registry</h2>
+               <p className="text-slate-500">Review and audit student work across all workshops.</p>
+           </div>
+           <button onClick={loadSubmissions} className="p-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-all shadow-sm">
+             <Loader2 size={20} className={isLoading ? 'animate-spin' : ''} />
+           </button>
        </div>
 
-       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50 text-slate-800 font-semibold border-b border-slate-200">
+            <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                     <tr>
-                        <th className="px-6 py-4">Task</th>
-                        <th className="px-6 py-4">Student</th>
-                        <th className="px-6 py-4">Submitted At</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Score</th>
-                        <th className="px-6 py-4 text-right">Action</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs">Module</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs">Student ID</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs">Submitted At</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs">Status</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs">Score</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-wider text-xs text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {submissions.length === 0 && (
-                        <tr><td colSpan={6} className="text-center py-8 text-slate-400 italic">No submissions found.</td></tr>
+                        <tr><td colSpan={6} className="text-center py-20 text-slate-400 italic">No submissions found</td></tr>
                     )}
-                    {submissions.map(sub => {
-                        const t = mockService.getTasks().find(task => task.id === sub.taskId);
-                        const s = mockService.getStudents().find(stu => stu.id === sub.studentId);
-                        if (!t || !s) return null;
-                        return (
-                            <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 font-medium text-slate-800">{t.title}</td>
-                                <td className="px-6 py-4">{s.name}</td>
-                                <td className="px-6 py-4 text-slate-500">{new Date(sub.submittedAt).toLocaleDateString()}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                                        ${sub.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                          sub.status === 'Approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        {sub.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 font-mono">{sub.status === 'Pending' ? '-' : sub.score}</td>
-                                <td className="px-6 py-4 text-right">
-                                    {sub.status === 'Pending' && (
-                                        <button 
-                                            onClick={() => setSelectedSubmissionId(sub.id)}
-                                            className="text-indigo-600 hover:text-indigo-800 font-medium text-xs border border-indigo-200 px-3 py-1 rounded bg-indigo-50"
-                                        >
-                                            Grade
-                                        </button>
-                                    )}
-                                </td>
-                            </tr>
-                        );
-                    })}
+                    {submissions.map(sub => (
+                        <tr key={sub.id} className="hover:bg-slate-50 transition-colors group">
+                            <td className="px-6 py-4 font-semibold text-slate-800">{sub.taskId}</td>
+                            <td className="px-6 py-4 text-slate-600">{sub.studentId.toUpperCase()}</td>
+                            <td className="px-6 py-4 text-xs text-slate-400">{new Date(sub.submittedAt).toLocaleString()}</td>
+                            <td className="px-6 py-4">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest 
+                                    ${sub.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 
+                                      sub.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                    {sub.status}
+                                </span>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-slate-700">{sub.status === 'Pending' ? '-' : sub.score}</td>
+                            <td className="px-6 py-4 text-right">
+                                {sub.status === 'Pending' ? (
+                                    <button 
+                                        onClick={() => setSelectedSubmissionId(sub.id)}
+                                        className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs uppercase rounded-lg shadow-sm hover:bg-indigo-700 transition-all"
+                                    >
+                                        Audit
+                                    </button>
+                                ) : (
+                                    <div className="text-slate-400 text-xs font-bold uppercase">Archived</div>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
                 </tbody>
             </table>
          </div>

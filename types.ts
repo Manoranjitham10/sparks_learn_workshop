@@ -1,3 +1,4 @@
+
 export enum TaskType {
   QUIZ = 'QUIZ',
   PROMPT = 'PROMPT',
@@ -10,6 +11,7 @@ export interface RubricItem {
   id: string;
   description: string;
   maxPoints: number;
+  isAiEvaluated?: boolean;
 }
 
 export interface QuizQuestion {
@@ -53,10 +55,14 @@ export interface Workshop {
 export interface Student {
   id: string;
   name: string;
+  roll_no: string;
   collegeId: string;
   email: string;
+  dob: string;
   totalPoints: number;
   badges: string[];
+  tasksCompleted: number;
+  attendance: number;
 }
 
 export interface Submission {
@@ -65,10 +71,15 @@ export interface Submission {
   studentId: string;
   submittedAt: string;
   status: 'Pending' | 'Approved' | 'Rejected';
-  content: string; // URL, Text, or File Name
+  content: string; 
   score: number;
   feedback?: string;
-  breakdown?: Record<string, number>; // rubricItemId -> score
+  breakdown?: Record<string, number>; 
+  aiGradeSuggestion?: {
+    score: number;
+    breakdown: Record<string, number>;
+    reasoning: string;
+  };
 }
 
 export interface Badge {

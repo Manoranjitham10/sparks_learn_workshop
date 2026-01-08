@@ -10,7 +10,7 @@
         font-family: 'Inter', sans-serif;
         background-color: #f3f4f6;
       }
-      /* Custom scrollbar for cleaner look */
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -24,6 +24,60 @@
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
+      }
+
+      /* PDF Export / Print Styles */
+      @media print {
+        @page {
+          size: A4 portrait;
+          margin: 0;
+        }
+        body {
+          background-color: white !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        aside, header, .no-print, button, .no-print-btn {
+          display: none !important;
+        }
+        main {
+          margin-left: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          overflow: visible !important;
+        }
+        #root {
+          width: 100% !important;
+        }
+        .max-w-7xl {
+          max-width: 100% !important;
+        }
+        .report-page {
+          width: 210mm;
+          min-height: 297mm;
+          padding: 15mm 20mm;
+          margin: 0 auto;
+          box-sizing: border-box;
+          page-break-after: always;
+          position: relative;
+          background: white !important;
+          border: none !important;
+        }
+        .report-page:last-child {
+          page-break-after: auto;
+        }
+        /* Ensure charts retain colors */
+        .recharts-cartesian-grid-horizontal line,
+        .recharts-cartesian-grid-vertical line {
+          stroke: #f1f5f9 !important;
+        }
+        .rounded-[40px] {
+          border-radius: 20px !important;
+        }
+        /* Prevent elements from being split across pages */
+        .break-inside-avoid {
+          break-inside: avoid;
+        }
       }
     </style>
   <script type="importmap">

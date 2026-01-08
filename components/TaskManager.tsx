@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, ChevronDown, CheckSquare, ListChecks, FileText, Globe, GraduationCap, 
   Upload, HelpCircle, FileJson, Trash2, Edit2, Save, X, Calendar, ArrowLeft, Loader2, Eye
 } from 'lucide-react';
 import { mockService } from '../services/mockService';
-import { Task, TaskType, RubricItem, QuizQuestion } from '../types';
+import { Task, TaskType, RubricItem, QuizQuestion, Workshop } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
 
 interface ImportedTask extends Omit<Task, 'id' | 'workshopId'> {
@@ -17,7 +18,9 @@ interface TaskManagerProps {
 }
 
 const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
-  const [tasks, setTasks] = useState<Task[]>(mockService.getTasks());
+  // Use empty array for initial state as mockService.getTasks() is async
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [view, setView] = useState<'list' | 'create' | 'import'>('list');
 
   // Form State
@@ -37,17 +40,28 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ImportedTask>>({});
   
-  // Initialize with prop if available, otherwise default to first workshop
-  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>(
-      workshopId || mockService.getWorkshops()[0]?.id || ''
-  );
+  // Initialize with empty string; will be resolved in useEffect
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>(workshopId || '');
   
   const [isParsing, setIsParsing] = useState(false);
 
   // View Details State
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
 
-  // Sync prop changes if workshopId changes dynamically (e.g. navigation)
+  // Load tasks and workshops asynchronously on mount
+  useEffect(() => {
+    const loadData = async () => {
+      const [t, w] = await Promise.all([mockService.getTasks(), mockService.getWorkshops()]);
+      setTasks(t);
+      setWorkshops(w);
+      if (!selectedWorkshopId && w.length > 0 && !workshopId) {
+        setSelectedWorkshopId(w[0].id);
+      }
+    };
+    loadData();
+  }, [workshopId]);
+
+  // Sync prop changes if workshopId changes dynamically
   useEffect(() => {
       if (workshopId) setSelectedWorkshopId(workshopId);
   }, [workshopId]);
@@ -94,7 +108,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `You are a data parser. Extract workshop tasks from the following file content. 
             The file might be CSV, Text, Markdown, or JSON.
             Structure the output strictly as a JSON array of tasks.
@@ -194,7 +208,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
     event.target.value = '';
   };
 
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     const newTask: Task = {
       id: `t${Date.now()}`,
       title,
@@ -206,14 +220,14 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
       rubric: type !== TaskType.QUIZ ? rubric : undefined,
       quizData: type === TaskType.QUIZ ? quizQuestions : undefined
     };
-    mockService.addTask(newTask);
-    setTasks([...mockService.getTasks()]);
+    await mockService.addTask(newTask);
+    setTasks(await mockService.getTasks());
     setView('list');
     resetForm();
   };
 
-  const handleFinalizeImport = () => {
-      importedTasks.forEach(imported => {
+  const handleFinalizeImport = async () => {
+      for (const imported of importedTasks) {
           const newTask: Task = {
               id: `t${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: imported.title,
@@ -225,9 +239,9 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
               rubric: imported.rubric,
               quizData: imported.quizData
           };
-          mockService.addTask(newTask);
-      });
-      setTasks([...mockService.getTasks()]);
+          await mockService.addTask(newTask);
+      }
+      setTasks(await mockService.getTasks());
       setImportedTasks([]);
       setImportStep('upload');
       setView('list');
@@ -267,10 +281,10 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
       reader.readAsText(file);
   };
   
-  const handleDeleteTask = (taskId: string) => {
+  const handleDeleteTask = async (taskId: string) => {
       if (window.confirm("Are you sure you want to delete this task?")) {
-          mockService.deleteTask(taskId);
-          setTasks(mockService.getTasks());
+          await mockService.deleteTask(taskId);
+          setTasks(await mockService.getTasks());
       }
   };
 
@@ -296,7 +310,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
                                     {viewingTask.type}
                                 </span>
                                 <span className="text-sm text-slate-500">
-                                    {mockService.getWorkshops().find(w => w.id === viewingTask.workshopId)?.title || 'Unknown Workshop'}
+                                    {workshops.find(w => w.id === viewingTask.workshopId)?.title || 'Unknown Workshop'}
                                 </span>
                           </div>
                           <h3 className="text-xl font-bold text-slate-800">{viewingTask.title}</h3>
@@ -413,7 +427,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
                                   value={selectedWorkshopId}
                                   onChange={(e) => setSelectedWorkshopId(e.target.value)}
                               >
-                                  {mockService.getWorkshops().map(w => (
+                                  {workshops.map(w => (
                                       <option key={w.id} value={w.id}>{w.title}</option>
                                   ))}
                               </select>
@@ -758,7 +772,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ workshopId }) => {
                 <h3 className="font-bold text-slate-800 mb-2 group-hover:text-indigo-600 transition-colors">{task.title}</h3>
                 <p className="text-sm text-slate-500 line-clamp-2 mb-4">{task.description}</p>
                 <div className="pt-4 border-t border-slate-50 flex justify-between items-center text-xs text-slate-400">
-                    <span className="flex items-center gap-1"><GraduationCap size={14}/> {mockService.getWorkshops().find(w => w.id === task.workshopId)?.title.split(' ')[0] || 'Workshop'}</span>
+                    <span className="flex items-center gap-1"><GraduationCap size={14}/> {workshops.find(w => w.id === task.workshopId)?.title.split(' ')[0] || 'Workshop'}</span>
                     <span>Due: {task.deadline || 'No Date'}</span>
                 </div>
             </div>
