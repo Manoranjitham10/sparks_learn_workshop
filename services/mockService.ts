@@ -85,7 +85,7 @@ class MockService {
     if (index > -1) {
       subs[index] = updated;
       this.save(STORAGE_KEYS.SUBMISSIONS, subs);
-      
+
       if (updated.status === 'Approved') {
         const students = await this.getStudents();
         const student = students.find(s => s.id === updated.studentId);
@@ -107,6 +107,21 @@ class MockService {
     const students = await this.getStudents();
     students.push(...newStudents);
     this.save(STORAGE_KEYS.STUDENTS, students);
+  }
+
+  async deleteStudents(studentIds: string[]) {
+    let students = await this.getStudents();
+    students = students.filter(s => !studentIds.includes(s.id));
+    this.save(STORAGE_KEYS.STUDENTS, students);
+  }
+
+  async updateStudent(updatedStudent: Student) {
+    const students = await this.getStudents();
+    const index = students.findIndex(s => s.id === updatedStudent.id);
+    if (index > -1) {
+      students[index] = updatedStudent;
+      this.save(STORAGE_KEYS.STUDENTS, students);
+    }
   }
 
   async getBadges(): Promise<Badge[]> {
@@ -135,7 +150,7 @@ class MockService {
   getCollegeVisualAnalytics(collegeId: string) {
     const students = this.load<Student>(STORAGE_KEYS.STUDENTS, []).filter(s => s.collegeId === collegeId);
     const workshops = this.load<Workshop>(STORAGE_KEYS.WORKSHOPS, []).filter(w => w.collegeId === collegeId);
-    
+
     return {
       kpis: {
         totalStudents: students.length,
@@ -153,7 +168,7 @@ class MockService {
         workshopPerformance: workshops.map(w => ({ title: w.title, participation: 80, completion: 70, assignedTasks: 10 })),
         radarData: { college: [80, 70, 90, 60, 85], platform: [60, 50, 70, 40, 65] },
         rankHistory: [10, 8, 5, 4],
-        dropOffPoints: [0, 5, 12, 18, 22] 
+        dropOffPoints: [0, 5, 12, 18, 22]
       }
     };
   }

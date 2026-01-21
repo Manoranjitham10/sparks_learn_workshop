@@ -54,6 +54,7 @@ export interface Workshop {
 
 export interface Student {
   id: string;
+  uid?: string; // Firebase Auth UID
   name: string;
   roll_no: string;
   collegeId: string;
@@ -71,10 +72,10 @@ export interface Submission {
   studentId: string;
   submittedAt: string;
   status: 'Pending' | 'Approved' | 'Rejected';
-  content: string; 
+  content: string;
   score: number;
   feedback?: string;
-  breakdown?: Record<string, number>; 
+  breakdown?: Record<string, number>;
   aiGradeSuggestion?: {
     score: number;
     breakdown: Record<string, number>;
